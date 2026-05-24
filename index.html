@@ -368,14 +368,18 @@ async function startRecording() {
   recognition.interimResults = true;
   recognition.lang = 'en-US';
 
-  let finalT = '';
+  let processedUpTo = 0;
+  let accumulated = '';
   recognition.onresult = (e) => {
+    let full = '';
     let interim = '';
     for (let i = 0; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalT += e.results[i][0].transcript + ' ';
-      else interim += e.results[i][0].transcript;
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) full += t + ' ';
+      else interim += t;
     }
-    transcript = finalT + interim;
+    transcript = full + interim;
+    accumulated = full; // keep only finals for accuracy
     const lt = document.getElementById('live-transcript');
     lt.style.display = 'block';
     lt.textContent = transcript;
@@ -526,11 +530,13 @@ function showResult() {
 
   // Words
   const wr = document.getElementById('word-results');
+  const spokenDebug = spokenWords.join(' ');
   wr.innerHTML = `
     <div class="wr-header">
       <span class="label">Word Accuracy</span>
       <span class="wr-pct" style="color:${pct>=80?'#4a9':pct>=60?'#d4813b':'#c0392b'}">${pct}%</span>
     </div>
+    <div style="font-size:11px;color:#444;margin-bottom:10px;word-break:break-all;">Heard: ${spokenDebug || '(nothing captured)'}</div>
     <div class="word-grid">
       ${results.map(r => `<span class="word-tag ${r.match?'word-hit':'word-miss'}">${r.word}</span>`).join('')}
     </div>
