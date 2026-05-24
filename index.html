@@ -414,19 +414,24 @@ function stopIfRecording() {
 }
 
 function stopRecording() {
+  // FIRST: grab transcript from the display before killing anything
+  const lt = document.getElementById('live-transcript');
+  const capturedText = lt ? lt.textContent : '';
+  if (capturedText && capturedText.trim()) {
+    transcript = capturedText;
+    savedTranscript = capturedText;
+  }
+
   isRecording = false;
   if (recognition) { recognition.onend = null; recognition.stop(); }
   if (volInterval) clearInterval(volInterval);
   if (stream) stream.getTracks().forEach(t => t.stop());
   if (audioCtx) audioCtx.close();
 
-  // Use saved transcript in case stop() cleared the live one
-  setTimeout(() => {
-    if (!transcript || transcript.trim() === '') {
-      transcript = savedTranscript;
-    }
-    showResult();
-  }, 800);
+  // Use the captured text no matter what
+  transcript = capturedText || savedTranscript || transcript;
+
+  setTimeout(showResult, 300);
 }
 
 // --- RESULT ---
@@ -594,9 +599,11 @@ function drawGraph(canvasId, data, recording) {
     d.forEach((v, i) => {
       const barH = Math.min(v * H * 3, H - 4);
       const x = i * barW, y = H - barH;
-      const below = v < lc().volumeFloor;
+      const isSilence = v < 0.03; // natural pause
+      const belowFloor = v < lc().volumeFloor && !isSilence;
       const grad = ctx.createLinearGradient(x, y, x, H);
-      if (below) { grad.addColorStop(0, '#c0392b88'); grad.addColorStop(1, '#c0392b22'); }
+      if (isSilence) { grad.addColorStop(0, '#33333366'); grad.addColorStop(1, '#33333322'); }
+      else if (belowFloor) { grad.addColorStop(0, '#c0392b88'); grad.addColorStop(1, '#c0392b22'); }
       else { grad.addColorStop(0, lc().color + 'cc'); grad.addColorStop(1, lc().color + '22'); }
       ctx.fillStyle = grad;
       ctx.fillRect(x + 0.5, y, barW - 1, barH);
