@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DICTION - Speech Training</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    color: #e8e4dc;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+  }
+
+  .app {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 28px 22px;
+  }
+
+  /* --- BRAND --- */
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: #b08d57; }
+  .brand-text { font-size: 13px; font-weight: 700; letter-spacing: 0.35em; color: #faf8f4; }
+  .tagline { font-size: 15px; color: #666; font-family: 'Source Serif 4', Georgia, serif; font-style: italic; margin-bottom: 32px; }
+
+  /* --- LABELS --- */
+  .label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #555; font-weight: 700; margin-bottom: 8px; }
+  .label-gold { color: #b08d57; }
+
+  /* --- LEVEL SELECTOR --- */
+  .levels { display: flex; gap: 8px; margin: 8px 0; }
+  .level-btn {
+    flex: 1; padding: 10px 0; background: #111; border: 1.5px solid #222; border-radius: 6px;
+    color: #555; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.2s;
+  }
+  .level-btn.active { background: var(--lc-bg); border-color: var(--lc); color: var(--lc); }
+  .level-info { margin-top: 8px; font-size: 12px; color: #555; margin-bottom: 28px; }
+
+  /* --- SCRIPT CARDS --- */
+  .scripts { display: grid; gap: 10px; margin-top: 10px; }
+  .script-card {
+    text-align: left; padding: 16px 18px; background: #111; border: 1px solid #1e1e1e;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  }
+  .script-card:hover { border-color: var(--lc); background: #141414; }
+  .script-card .sc-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--lc); font-weight: 700; margin-bottom: 6px; }
+  .script-card .sc-text { font-size: 14px; color: #888; line-height: 1.6; font-family: 'Source Serif 4', Georgia, serif; }
+
+  /* --- HISTORY --- */
+  .history { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .h-box {
+    width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center;
+    justify-content: center; font-size: 12px;
+  }
+  .h-pass { background: #4a911a33; border: 1px solid #4a911a66; color: #6fcf97; }
+  .h-fail { background: #c0392b33; border: 1px solid #c0392b66; color: #e74c3c; }
+
+  /* --- TRAINING SCREEN --- */
+  .back-btn {
+    background: none; border: none; color: #555; font-size: 12px; cursor: pointer;
+    padding: 0; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em;
+  }
+  .train-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .train-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--lc); font-weight: 700; }
+  .rec-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #c0392b; font-weight: 600; }
+  .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #c0392b; animation: pulse 1.2s infinite; }
+
+  .target-box {
+    background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 20px; margin-bottom: 16px;
+  }
+  .target-box .tb-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #444; margin-bottom: 10px; }
+  .target-box p { font-size: 16px; line-height: 1.9; color: #d4d0c8; font-family: 'Source Serif 4', Georgia, serif; }
+
+  .graph-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #444; margin-bottom: 8px; }
+  #volumeCanvas { width: 100%; height: 140px; border-radius: 8px; display: block; margin-bottom: 16px; }
+
+  .live-transcript {
+    background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 6px; padding: 14px 16px;
+    margin-bottom: 16px; font-size: 13px; color: #888; line-height: 1.7; max-height: 100px; overflow-y: auto;
+  }
+
+  .error-box {
+    background: #c0392b22; border: 1px solid #c0392b44; border-radius: 6px; padding: 12px 16px;
+    margin-bottom: 16px; font-size: 13px; color: #e74c3c;
+  }
+
+  .rec-btn {
+    width: 100%; padding: 16px; border: none; border-radius: 8px; color: #fff;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.2s;
+  }
+  .rec-btn.start { background: var(--lc); }
+  .rec-btn.stop { background: #c0392b; }
+
+  /* --- RESULT SCREEN --- */
+  .verdict { text-align: center; padding: 28px 0 20px; margin-bottom: 20px; }
+  .verdict-icon { font-size: 48px; margin-bottom: 8px; }
+  .verdict-text { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .verdict-sub { font-size: 13px; color: #555; }
+
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .metric-card {
+    background: #111; border-radius: 8px; padding: 16px; text-align: center;
+  }
+  .metric-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-bottom: 6px; }
+  .metric-val { font-size: 11px; font-weight: 600; }
+
+  .word-results { margin-top: 16px; }
+  .wr-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .wr-pct { font-size: 24px; font-weight: 700; }
+  .word-grid { display: flex; flex-wrap: wrap; gap: 5px; line-height: 1.8; }
+  .word-tag { padding: 2px 7px; border-radius: 4px; font-size: 14px; }
+  .word-hit { background: #4a911a22; color: #6fcf97; border: 1px solid #4a911a44; }
+  .word-miss { background: #c0392b22; color: #e74c3c; border: 1px solid #c0392b44; text-decoration: line-through; }
+
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+  .act-btn {
+    padding: 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; font-family: 'JetBrains Mono', monospace;
+  }
+  .act-primary { background: var(--lc); border: none; color: #fff; }
+  .act-secondary { background: #111; border: 1px solid #222; color: #888; }
+
+  .footer {
+    margin-top: 36px; text-align: center; font-size: 10px; color: #333;
+    letter-spacing: 0.15em; text-transform: uppercase; padding-top: 16px; border-top: 1px solid #151515;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Screens */
+  .screen { display: none; }
+  .screen.active { display: block; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- HOME SCREEN -->
+  <div class="screen active" id="screen-home">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <span class="brand-text">DICTION</span>
+    </div>
+    <p class="tagline">Speak until every word lands.</p>
+
+    <div class="label">Difficulty</div>
+    <div class="levels" id="level-btns"></div>
+    <div class="level-info" id="level-info"></div>
+
+    <div class="label">Choose a Script</div>
+    <div class="scripts" id="script-list"></div>
+
+    <div id="history-section" style="margin-top:24px;display:none">
+      <div class="label">Session History</div>
+      <div class="history" id="history-grid"></div>
+    </div>
+
+    <div class="footer">Built by Genie · Communication Training</div>
+  </div>
+
+  <!-- TRAIN SCREEN -->
+  <div class="screen" id="screen-train">
+    <button class="back-btn" onclick="goHome()">&#8592; Back</button>
+    <div class="train-header">
+      <div class="train-label" id="train-label"></div>
+      <div class="rec-badge" id="rec-badge" style="display:none">
+        <div class="rec-dot"></div> RECORDING
+      </div>
+    </div>
+
+    <div class="target-box">
+      <div class="tb-label">Read this out loud</div>
+      <p id="target-text"></p>
+    </div>
+
+    <div class="graph-label">Energy Level</div>
+    <canvas id="volumeCanvas"></canvas>
+
+    <div class="live-transcript" id="live-transcript" style="display:none"></div>
+    <div class="error-box" id="error-box" style="display:none"></div>
+
+    <button class="rec-btn start" id="rec-btn" onclick="toggleRecording()">&#9679;  Start Recording</button>
+  </div>
+
+  <!-- RESULT SCREEN -->
+  <div class="screen" id="screen-result">
+    <div class="verdict" id="verdict"></div>
+    <div class="metrics" id="metrics"></div>
+
+    <div class="graph-label">Your Energy Graph</div>
+    <canvas id="resultCanvas"></canvas>
+
+    <div class="word-results" id="word-results"></div>
+
+    <div class="actions">
+      <button class="act-btn act-primary" onclick="tryAgain()">Try Again</button>
+      <button class="act-btn act-secondary" onclick="goHome()">New Script</button>
+    </div>
+
+    <div class="footer" id="result-footer"></div>
+  </div>
+
+</div>
+
+<script>
+// --- DATA ---
+const SCRIPTS = [
+  { id:1, label:"Warm-Up", text:"I have something worth saying. Every word I speak deserves to land completely. I will not rush. I will not mumble. I will finish every single word." },
+  { id:2, label:"Foundations", text:"Confident people do not speak fast. They speak with purpose. Every consonant hits. Every vowel opens. When I talk, people should hear every part of what I am saying." },
+  { id:3, label:"Sustained", text:"I have spent too long letting my words come out half-finished. Every sentence I speak deserves to land. Not because I need to impress anyone, but because what I have to say is worth hearing completely. I will not rush past the hard words. I will give them room." },
+  { id:4, label:"Advanced", text:"The difference between someone who communicates well and someone who does not is not intelligence. It is intentionality. Intentionality in how they open their mouth. Intentionality in how they finish their words. Intentionality in how they hold their energy from the first syllable to the last." },
+];
+
+const LEVELS = [
+  { name:"Loose", accuracy:0.6, volumeFloor:0.08, color:"#44aa99" },
+  { name:"Firm", accuracy:0.72, volumeFloor:0.14, color:"#b08d57" },
+  { name:"Tight", accuracy:0.82, volumeFloor:0.2, color:"#d4813b" },
+  { name:"Locked", accuracy:0.9, volumeFloor:0.28, color:"#c0392b" },
+];
+
+let currentLevel = 0;
+let selectedScript = null;
+let isRecording = false;
+let volumeHistory = [];
+let transcript = "";
+let recognition = null;
+let audioCtx = null;
+let analyser = null;
+let stream = null;
+let volInterval = null;
+let attemptCount = 0;
+let passHistory = [];
+
+function lc() { return LEVELS[currentLevel]; }
+
+function setCSS() {
+  const l = lc();
+  document.documentElement.style.setProperty('--lc', l.color);
+  document.documentElement.style.setProperty('--lc-bg', l.color + '22');
+}
+
+// --- SCREENS ---
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+function goHome() {
+  stopIfRecording();
+  showScreen('home');
+  renderHome();
+}
+
+// --- HOME ---
+function renderHome() {
+  setCSS();
+  // Levels
+  const lb = document.getElementById('level-btns');
+  lb.innerHTML = LEVELS.map((l, i) => `
+    <button class="level-btn ${i===currentLevel?'active':''}"
+      style="${i===currentLevel ? '--lc:'+l.color+';--lc-bg:'+l.color+'22;border-color:'+l.color+';color:'+l.color+';background:'+l.color+'22' : ''}"
+      onclick="setLevel(${i})">${l.name}</button>
+  `).join('');
+
+  document.getElementById('level-info').textContent =
+    `Accuracy: ${Math.round(lc().accuracy*100)}% · Energy floor: ${Math.round(lc().volumeFloor*100)}%`;
+
+  // Scripts
+  const sl = document.getElementById('script-list');
+  sl.innerHTML = SCRIPTS.map(s => `
+    <div class="script-card" onclick="selectScript(${s.id})">
+      <div class="sc-label">${s.label}</div>
+      <div class="sc-text">${s.text.slice(0,80)}...</div>
+    </div>
+  `).join('');
+
+  // History
+  const hs = document.getElementById('history-section');
+  if (passHistory.length > 0) {
+    hs.style.display = 'block';
+    document.getElementById('history-grid').innerHTML = passHistory.map(p =>
+      `<div class="h-box ${p?'h-pass':'h-fail'}">${p?'✓':'×'}</div>`
+    ).join('');
+  } else {
+    hs.style.display = 'none';
+  }
+}
+
+function setLevel(i) { currentLevel = i; renderHome(); }
+
+function selectScript(id) {
+  selectedScript = SCRIPTS.find(s => s.id === id);
+  showTrain();
+}
+
+// --- TRAIN ---
+function showTrain() {
+  setCSS();
+  showScreen('train');
+  document.getElementById('train-label').textContent = selectedScript.label + ' · ' + lc().name;
+  document.getElementById('target-text').textContent = selectedScript.text;
+  document.getElementById('rec-badge').style.display = 'none';
+  document.getElementById('live-transcript').style.display = 'none';
+  document.getElementById('error-box').style.display = 'none';
+
+  const btn = document.getElementById('rec-btn');
+  btn.className = 'rec-btn start';
+  btn.innerHTML = '&#9679;  Start Recording';
+  btn.style.background = lc().color;
+
+  transcript = '';
+  volumeHistory = [];
+  drawGraph('volumeCanvas', [], false);
+}
+
+function toggleRecording() {
+  if (isRecording) stopRecording();
+  else startRecording();
+}
+
+async function startRecording() {
+  const err = document.getElementById('error-box');
+  err.style.display = 'none';
+  transcript = '';
+  volumeHistory = [];
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    err.textContent = 'Speech recognition not supported. Use Chrome or Edge.';
+    err.style.display = 'block';
+    return;
+  }
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    err.textContent = 'Microphone access denied. Click the lock icon in your address bar to allow it.';
+    err.style.display = 'block';
+    return;
+  }
+
+  // Audio
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  volInterval = setInterval(() => {
+    analyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+    const avg = sum / dataArray.length / 255;
+    volumeHistory.push(avg);
+    drawGraph('volumeCanvas', volumeHistory, true);
+  }, 80);
+
+  // Recognition
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  let finalT = '';
+  recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = 0; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalT += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
+    }
+    transcript = finalT + interim;
+    const lt = document.getElementById('live-transcript');
+    lt.style.display = 'block';
+    lt.textContent = transcript;
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error !== 'no-speech') console.error('SR error:', e.error);
+  };
+
+  recognition.onend = () => {
+    if (isRecording) { try { recognition.start(); } catch(e){} }
+  };
+
+  recognition.start();
+  isRecording = true;
+
+  document.getElementById('rec-badge').style.display = 'flex';
+  const btn = document.getElementById('rec-btn');
+  btn.className = 'rec-btn stop';
+  btn.innerHTML = '&#9632;  Stop & Evaluate';
+  btn.style.background = '#c0392b';
+}
+
+function stopIfRecording() {
+  if (isRecording) {
+    isRecording = false;
+    if (recognition) { recognition.onend = null; recognition.stop(); }
+    if (volInterval) clearInterval(volInterval);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (audioCtx) audioCtx.close();
+  }
+}
+
+function stopRecording() {
+  isRecording = false;
+  if (recognition) { recognition.onend = null; recognition.stop(); }
+  if (volInterval) clearInterval(volInterval);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (audioCtx) audioCtx.close();
+
+  setTimeout(showResult, 400);
+}
+
+// --- RESULT ---
+function normalize(str) {
+  return str.toLowerCase().replace(/[^a-z0-9\s']/g, '').split(/\s+/).filter(Boolean);
+}
+
+function compareWords(target, spoken) {
+  const results = [];
+  const spLow = spoken.map(w => w.toLowerCase());
+  let si = 0;
+  for (let ti = 0; ti < target.length; ti++) {
+    if (si < spLow.length && spLow[si] === target[ti]) {
+      results.push({ word: target[ti], match: true }); si++;
+    } else {
+      let found = false;
+      for (let lk = si+1; lk < Math.min(si+3, spLow.length); lk++) {
+        if (spLow[lk] === target[ti]) {
+          results.push({ word: target[ti], match: true }); si = lk+1; found = true; break;
+        }
+      }
+      if (!found) results.push({ word: target[ti], match: false });
+    }
+  }
+  return results;
+}
+
+function showResult() {
+  setCSS();
+  const targetWords = normalize(selectedScript.text);
+  const spokenWords = normalize(transcript);
+  const results = compareWords(targetWords, spokenWords);
+
+  const matched = results.filter(r => r.match).length;
+  const accuracy = targetWords.length > 0 ? matched / targetWords.length : 0;
+  const accPass = accuracy >= lc().accuracy;
+
+  const aboveFloor = volumeHistory.filter(v => v >= lc().volumeFloor).length;
+  const volRatio = volumeHistory.length > 0 ? aboveFloor / volumeHistory.length : 0;
+  const volPass = volRatio >= 0.65;
+
+  const passed = accPass && volPass;
+  attemptCount++;
+  passHistory.push(passed);
+
+  showScreen('result');
+
+  // Verdict
+  document.getElementById('verdict').innerHTML = `
+    <div class="verdict-icon">${passed ? '✓' : '×'}</div>
+    <div class="verdict-text" style="color:${passed ? '#6fcf97' : '#e74c3c'}">${passed ? 'PASS' : 'NOT YET'}</div>
+    <div class="verdict-sub">${passed ? 'Every word landed. Energy held.' : 'Some words got lost or your energy dropped. Try again.'}</div>
+  `;
+
+  // Metrics
+  const pct = Math.round(accuracy * 100);
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric-card" style="border:1px solid ${accPass?'#4a911a44':'#c0392b44'}">
+      <div class="metric-label">Accuracy</div>
+      <div class="metric-val" style="color:${accPass?'#6fcf97':'#e74c3c'}">${accPass?'PASS':'FAIL'} (${pct}% / need ${Math.round(lc().accuracy*100)}%)</div>
+    </div>
+    <div class="metric-card" style="border:1px solid ${volPass?'#4a911a44':'#c0392b44'}">
+      <div class="metric-label">Energy</div>
+      <div class="metric-val" style="color:${volPass?'#6fcf97':'#e74c3c'}">${volPass?'PASS':'FAIL'} (${Math.round(volRatio*100)}% above floor)</div>
+    </div>
+  `;
+
+  // Graph
+  drawGraph('resultCanvas', volumeHistory, false);
+
+  // Words
+  const wr = document.getElementById('word-results');
+  wr.innerHTML = `
+    <div class="wr-header">
+      <span class="label">Word Accuracy</span>
+      <span class="wr-pct" style="color:${pct>=80?'#4a9':pct>=60?'#d4813b':'#c0392b'}">${pct}%</span>
+    </div>
+    <div class="word-grid">
+      ${results.map(r => `<span class="word-tag ${r.match?'word-hit':'word-miss'}">${r.word}</span>`).join('')}
+    </div>
+  `;
+
+  document.getElementById('result-footer').textContent = `Attempt #${attemptCount} · ${lc().name} level`;
+}
+
+function tryAgain() { showTrain(); }
+
+// --- GRAPH ---
+function drawGraph(canvasId, data, recording) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1;
+  for (let i = 1; i < 5; i++) { const y = H/5*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Floor line
+  const floorY = H - lc().volumeFloor * H * 3;
+  ctx.strokeStyle = lc().color + '66'; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
+  ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(W, floorY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = lc().color + '88'; ctx.font = '10px JetBrains Mono, monospace';
+  ctx.fillText('MIN ENERGY', 8, floorY - 6);
+
+  // Bars
+  if (data.length > 0) {
+    const maxBars = 120;
+    const d = data.length > maxBars ? data.slice(-maxBars) : data;
+    const barW = W / maxBars;
+    d.forEach((v, i) => {
+      const barH = Math.min(v * H * 3, H - 4);
+      const x = i * barW, y = H - barH;
+      const below = v < lc().volumeFloor;
+      const grad = ctx.createLinearGradient(x, y, x, H);
+      if (below) { grad.addColorStop(0, '#c0392b88'); grad.addColorStop(1, '#c0392b22'); }
+      else { grad.addColorStop(0, lc().color + 'cc'); grad.addColorStop(1, lc().color + '22'); }
+      ctx.fillStyle = grad;
+      ctx.fillRect(x + 0.5, y, barW - 1, barH);
+    });
+
+    if (recording && data.length > 0) {
+      const lastV = data[data.length - 1];
+      const dotY = H - Math.min(lastV * H * 3, H - 4);
+      const dotX = Math.min(data.length, maxBars) * (W / maxBars);
+      ctx.beginPath(); ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+    }
+  }
+}
+
+// --- INIT ---
+renderHome();
+</script>
+</body>
+</html>
