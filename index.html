@@ -453,7 +453,8 @@ async function stopRecording() {
       },
       body: JSON.stringify({
         audio_url: uploadData.upload_url,
-        language_code: 'en'
+        language_code: 'en',
+        speech_model: 'universal-3-pro'
       })
     });
     const txText = await txRes.text();
