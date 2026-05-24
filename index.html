@@ -451,10 +451,14 @@ async function stopRecording() {
         'Authorization': ASSEMBLYAI_KEY,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ audio_url: uploadData.upload_url })
+      body: JSON.stringify({
+        audio_url: uploadData.upload_url,
+        language_code: 'en'
+      })
     });
-    if (!txRes.ok) throw new Error('Transcript request failed: ' + txRes.status);
-    const txData = await txRes.json();
+    const txText = await txRes.text();
+    if (!txRes.ok) throw new Error('Transcript request failed (' + txRes.status + '): ' + txText);
+    const txData = JSON.parse(txText);
     const txId = txData.id;
 
     // Step 3: Poll for result with timeout
