@@ -237,6 +237,9 @@ let volInterval = null;
 let attemptCount = 0;
 let passHistory = [];
 let savedTranscript = '';
+let mediaRecorder = null;
+let audioChunks = [];
+const ASSEMBLYAI_KEY = '365af289aeda44679a63496f78a96684';
 
 function lc() { return LEVELS[currentLevel]; }
 
@@ -332,22 +335,15 @@ async function startRecording() {
   savedTranscript = '';
   volumeHistory = [];
 
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    err.textContent = 'Speech recognition not supported. Use Chrome or Edge.';
-    err.style.display = 'block';
-    return;
-  }
-
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch(e) {
-    err.textContent = 'Microphone access denied. Click the lock icon in your address bar to allow it.';
+    err.textContent = 'Microphone access denied. Allow microphone access in your browser settings and try again.';
     err.style.display = 'block';
     return;
   }
 
-  // Audio
+  // Audio analyser for volume graph
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const source = audioCtx.createMediaStreamSource(stream);
   analyser = audioCtx.createAnalyser();
@@ -364,48 +360,20 @@ async function startRecording() {
     drawGraph('volumeCanvas', volumeHistory, true);
   }, 80);
 
-  // Recognition - Android-compatible approach
-  recognition = new SR();
-  recognition.continuous = false; // Android Chrome works better with this off
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-
-  let allFinals = '';
-
-  recognition.onresult = (e) => {
-    let interim = '';
-    let sessionFinal = '';
-    for (let i = 0; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) sessionFinal += t + ' ';
-      else interim += t;
-    }
-    if (sessionFinal) allFinals += sessionFinal;
-    transcript = allFinals + interim;
-    savedTranscript = allFinals + interim;
-    const lt = document.getElementById('live-transcript');
-    lt.style.display = 'block';
-    lt.textContent = transcript || '(listening...)';
+  // MediaRecorder for actual audio capture
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+  audioChunks = [];
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) audioChunks.push(e.data);
   };
+  mediaRecorder.start();
 
-  recognition.onerror = (e) => {
-    if (e.error === 'no-speech' || e.error === 'aborted') {
-      // Restart on these common non-errors
-      if (isRecording) { try { recognition.start(); } catch(ex){} }
-    } else {
-      console.error('SR error:', e.error);
-    }
-  };
-
-  recognition.onend = () => {
-    // Auto-restart when it stops (Android stops after each phrase)
-    if (isRecording) {
-      try { recognition.start(); } catch(e){}
-    }
-  };
-
-  recognition.start();
   isRecording = true;
+
+  // Show recording state
+  const lt = document.getElementById('live-transcript');
+  lt.style.display = 'block';
+  lt.textContent = 'Recording... speak now.';
 
   document.getElementById('rec-badge').style.display = 'flex';
   const btn = document.getElementById('rec-btn');
@@ -417,32 +385,96 @@ async function startRecording() {
 function stopIfRecording() {
   if (isRecording) {
     isRecording = false;
-    if (recognition) { recognition.onend = null; recognition.stop(); }
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     if (volInterval) clearInterval(volInterval);
     if (stream) stream.getTracks().forEach(t => t.stop());
     if (audioCtx) audioCtx.close();
   }
 }
 
-function stopRecording() {
-  // FIRST: grab transcript from the display before killing anything
-  const lt = document.getElementById('live-transcript');
-  const capturedText = lt ? lt.textContent : '';
-  if (capturedText && capturedText.trim()) {
-    transcript = capturedText;
-    savedTranscript = capturedText;
-  }
-
+async function stopRecording() {
   isRecording = false;
-  if (recognition) { recognition.onend = null; recognition.stop(); }
   if (volInterval) clearInterval(volInterval);
+
+  // Show processing state
+  const btn = document.getElementById('rec-btn');
+  btn.innerHTML = '⏳  Transcribing...';
+  btn.style.background = '#555';
+  btn.disabled = true;
+
+  const lt = document.getElementById('live-transcript');
+  lt.textContent = 'Processing your recording...';
+
+  // Stop MediaRecorder and wait for data
+  const audioBlob = await new Promise((resolve) => {
+    mediaRecorder.onstop = () => {
+      resolve(new Blob(audioChunks, { type: 'audio/webm' }));
+    };
+    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    else resolve(new Blob(audioChunks, { type: 'audio/webm' }));
+  });
+
+  // Stop mic
   if (stream) stream.getTracks().forEach(t => t.stop());
   if (audioCtx) audioCtx.close();
 
-  // Use the captured text no matter what
-  transcript = capturedText || savedTranscript || transcript;
+  // Transcribe with AssemblyAI
+  try {
+    lt.textContent = 'Uploading audio...';
 
-  setTimeout(showResult, 300);
+    // Step 1: Upload audio
+    const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: { 'Authorization': ASSEMBLYAI_KEY },
+      body: audioBlob
+    });
+    const uploadData = await uploadRes.json();
+
+    lt.textContent = 'Transcribing...';
+
+    // Step 2: Request transcription
+    const txRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: {
+        'Authorization': ASSEMBLYAI_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ audio_url: uploadData.upload_url })
+    });
+    const txData = await txRes.json();
+    const txId = txData.id;
+
+    // Step 3: Poll for result
+    let result = null;
+    while (true) {
+      const pollRes = await fetch('https://api.assemblyai.com/v2/transcript/' + txId, {
+        headers: { 'Authorization': ASSEMBLYAI_KEY }
+      });
+      result = await pollRes.json();
+      if (result.status === 'completed') break;
+      if (result.status === 'error') throw new Error(result.error);
+      lt.textContent = 'Transcribing... please wait.';
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    transcript = result.text || '';
+    savedTranscript = transcript;
+    lt.textContent = transcript || '(no speech detected)';
+
+  } catch(e) {
+    console.error('Transcription error:', e);
+    const errBox = document.getElementById('error-box');
+    errBox.textContent = 'Transcription failed: ' + e.message;
+    errBox.style.display = 'block';
+    btn.innerHTML = '&#9679;  Start Recording';
+    btn.style.background = lc().color;
+    btn.disabled = false;
+    btn.className = 'rec-btn start';
+    return;
+  }
+
+  btn.disabled = false;
+  showResult();
 }
 
 // --- RESULT ---
