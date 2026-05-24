@@ -360,13 +360,23 @@ async function startRecording() {
     drawGraph('volumeCanvas', volumeHistory, true);
   }, 80);
 
-  // MediaRecorder for actual audio capture
-  mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+  // MediaRecorder for actual audio capture - pick best supported format
+  let mimeType = 'audio/webm;codecs=opus';
+  if (!MediaRecorder.isTypeSupported(mimeType)) {
+    mimeType = 'audio/webm';
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = 'audio/mp4';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = ''; // let browser pick
+      }
+    }
+  }
+  mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
   audioChunks = [];
   mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) audioChunks.push(e.data);
   };
-  mediaRecorder.start();
+  mediaRecorder.start(1000); // collect in 1-second chunks
 
   isRecording = true;
 
@@ -420,7 +430,7 @@ async function stopRecording() {
 
   // Transcribe with AssemblyAI
   try {
-    lt.textContent = 'Uploading audio...';
+    lt.textContent = 'Uploading audio (' + Math.round(audioBlob.size/1024) + ' KB)...';
 
     // Step 1: Upload audio
     const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
@@ -428,9 +438,11 @@ async function stopRecording() {
       headers: { 'Authorization': ASSEMBLYAI_KEY },
       body: audioBlob
     });
+    if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
     const uploadData = await uploadRes.json();
+    if (!uploadData.upload_url) throw new Error('No upload URL returned');
 
-    lt.textContent = 'Transcribing...';
+    lt.textContent = 'Audio uploaded. Transcribing...';
 
     // Step 2: Request transcription
     const txRes = await fetch('https://api.assemblyai.com/v2/transcript', {
@@ -441,21 +453,26 @@ async function stopRecording() {
       },
       body: JSON.stringify({ audio_url: uploadData.upload_url })
     });
+    if (!txRes.ok) throw new Error('Transcript request failed: ' + txRes.status);
     const txData = await txRes.json();
     const txId = txData.id;
 
-    // Step 3: Poll for result
+    // Step 3: Poll for result with timeout
     let result = null;
-    while (true) {
+    let polls = 0;
+    const maxPolls = 30; // ~45 seconds max
+    while (polls < maxPolls) {
       const pollRes = await fetch('https://api.assemblyai.com/v2/transcript/' + txId, {
         headers: { 'Authorization': ASSEMBLYAI_KEY }
       });
       result = await pollRes.json();
       if (result.status === 'completed') break;
-      if (result.status === 'error') throw new Error(result.error);
-      lt.textContent = 'Transcribing... please wait.';
+      if (result.status === 'error') throw new Error('Transcription error: ' + (result.error || 'unknown'));
+      polls++;
+      lt.textContent = 'Transcribing... (' + polls + '/' + maxPolls + ')';
       await new Promise(r => setTimeout(r, 1500));
     }
+    if (polls >= maxPolls) throw new Error('Transcription timed out after 45 seconds');
 
     transcript = result.text || '';
     savedTranscript = transcript;
