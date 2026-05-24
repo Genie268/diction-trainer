@@ -364,33 +364,44 @@ async function startRecording() {
     drawGraph('volumeCanvas', volumeHistory, true);
   }, 80);
 
-  // Recognition
+  // Recognition - Android-compatible approach
   recognition = new SR();
-  recognition.continuous = true;
+  recognition.continuous = false; // Android Chrome works better with this off
   recognition.interimResults = true;
   recognition.lang = 'en-US';
 
+  let allFinals = '';
+
   recognition.onresult = (e) => {
-    let full = '';
     let interim = '';
+    let sessionFinal = '';
     for (let i = 0; i < e.results.length; i++) {
       const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) full += t + ' ';
+      if (e.results[i].isFinal) sessionFinal += t + ' ';
       else interim += t;
     }
-    transcript = full + interim;
-    savedTranscript = transcript; // always keep a backup
+    if (sessionFinal) allFinals += sessionFinal;
+    transcript = allFinals + interim;
+    savedTranscript = allFinals + interim;
     const lt = document.getElementById('live-transcript');
     lt.style.display = 'block';
-    lt.textContent = transcript;
+    lt.textContent = transcript || '(listening...)';
   };
 
   recognition.onerror = (e) => {
-    if (e.error !== 'no-speech') console.error('SR error:', e.error);
+    if (e.error === 'no-speech' || e.error === 'aborted') {
+      // Restart on these common non-errors
+      if (isRecording) { try { recognition.start(); } catch(ex){} }
+    } else {
+      console.error('SR error:', e.error);
+    }
   };
 
   recognition.onend = () => {
-    if (isRecording) { try { recognition.start(); } catch(e){} }
+    // Auto-restart when it stops (Android stops after each phrase)
+    if (isRecording) {
+      try { recognition.start(); } catch(e){}
+    }
   };
 
   recognition.start();
