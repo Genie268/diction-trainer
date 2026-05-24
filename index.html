@@ -424,21 +424,58 @@ function normalize(str) {
   return str.toLowerCase().replace(/[^a-z0-9\s']/g, '').split(/\s+/).filter(Boolean);
 }
 
+function similarEnough(a, b) {
+  if (a === b) return true;
+  if (a.length < 3 || b.length < 3) return a === b;
+  // Check if one contains the other (handles partial recognition)
+  if (a.includes(b) || b.includes(a)) return true;
+  // Levenshtein-lite: allow 1-2 char difference for longer words
+  if (Math.abs(a.length - b.length) > 2) return false;
+  let diff = 0;
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length >= b.length ? b : a;
+  let j = 0;
+  for (let i = 0; i < longer.length && j < shorter.length; i++) {
+    if (longer[i] !== shorter[j]) { diff++; if (diff > 2) return false; }
+    else { j++; }
+  }
+  return true;
+}
+
 function compareWords(target, spoken) {
+  // Build a set of all spoken words for quick lookup
+  const spokenSet = new Set(spoken);
+  // Also build frequency map
+  const spokenFreq = {};
+  spoken.forEach(w => { spokenFreq[w] = (spokenFreq[w] || 0) + 1; });
+
   const results = [];
-  const spLow = spoken.map(w => w.toLowerCase());
-  let si = 0;
+  const usedFreq = {};
+
   for (let ti = 0; ti < target.length; ti++) {
-    if (si < spLow.length && spLow[si] === target[ti]) {
-      results.push({ word: target[ti], match: true }); si++;
+    const tw = target[ti];
+    // Exact match with remaining frequency
+    const usedCount = usedFreq[tw] || 0;
+    const availCount = spokenFreq[tw] || 0;
+    if (availCount > usedCount) {
+      results.push({ word: tw, match: true });
+      usedFreq[tw] = usedCount + 1;
     } else {
+      // Fuzzy match: check if any spoken word is close enough
       let found = false;
-      for (let lk = si+1; lk < Math.min(si+3, spLow.length); lk++) {
-        if (spLow[lk] === target[ti]) {
-          results.push({ word: target[ti], match: true }); si = lk+1; found = true; break;
+      for (const sw of spoken) {
+        const swUsed = usedFreq[sw] || 0;
+        const swAvail = spokenFreq[sw] || 0;
+        if (swAvail > swUsed && similarEnough(tw, sw)) {
+          results.push({ word: tw, match: true });
+          usedFreq[sw] = swUsed + 1;
+          found = true;
+          break;
         }
       }
-      if (!found) results.push({ word: target[ti], match: false });
+      if (!found) {
+        results.push({ word: tw, match: false });
+      }
     }
   }
   return results;
