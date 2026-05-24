@@ -193,6 +193,28 @@
     <div class="verdict" id="verdict"></div>
     <div class="metrics" id="metrics"></div>
 
+    <!-- PLAYBACK -->
+    <div id="playback-section" style="margin-bottom:20px">
+      <div class="graph-label">Listen Back</div>
+      <div id="playback-player" style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:16px 18px;position:relative;overflow:hidden;">
+        <canvas id="waveformCanvas" style="width:100%;height:60px;display:block;border-radius:6px;margin-bottom:12px;"></canvas>
+        <div style="display:flex;align-items:center;gap:14px;">
+          <button id="play-btn" onclick="togglePlayback()" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--lc);background:transparent;color:var(--lc);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
+            ▶
+          </button>
+          <div style="flex:1;">
+            <div id="playback-progress" style="width:100%;height:4px;background:#222;border-radius:2px;position:relative;cursor:pointer;" onclick="seekPlayback(event)">
+              <div id="playback-fill" style="height:100%;background:var(--lc);border-radius:2px;width:0%;transition:width 0.1s linear;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;">
+              <span id="playback-time" style="font-size:10px;color:#555;font-family:'JetBrains Mono',monospace;">0:00</span>
+              <span id="playback-duration" style="font-size:10px;color:#555;font-family:'JetBrains Mono',monospace;">0:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="graph-label">Your Energy Graph</div>
     <canvas id="resultCanvas"></canvas>
 
@@ -239,6 +261,10 @@ let passHistory = [];
 let savedTranscript = '';
 let mediaRecorder = null;
 let audioChunks = [];
+let recordedBlob = null;
+let playbackAudio = null;
+let playbackAnimFrame = null;
+let isPlaying = false;
 const ASSEMBLYAI_KEY = '365af289aeda44679a63496f78a96684';
 
 function lc() { return LEVELS[currentLevel]; }
@@ -257,6 +283,9 @@ function showScreen(id) {
 
 function goHome() {
   stopIfRecording();
+  if (playbackAudio) { playbackAudio.pause(); playbackAudio = null; }
+  if (playbackAnimFrame) cancelAnimationFrame(playbackAnimFrame);
+  isPlaying = false;
   showScreen('home');
   renderHome();
 }
@@ -427,6 +456,9 @@ async function stopRecording() {
   // Stop mic
   if (stream) stream.getTracks().forEach(t => t.stop());
   if (audioCtx) audioCtx.close();
+
+  // Save for playback
+  recordedBlob = audioBlob;
 
   // Transcribe with AssemblyAI
   try {
@@ -624,9 +656,17 @@ function showResult() {
   `;
 
   document.getElementById('result-footer').textContent = `Attempt #${attemptCount} · ${lc().name} level`;
+
+  // Setup audio playback
+  setupPlayback();
 }
 
-function tryAgain() { showTrain(); }
+function tryAgain() {
+  if (playbackAudio) { playbackAudio.pause(); playbackAudio = null; }
+  if (playbackAnimFrame) cancelAnimationFrame(playbackAnimFrame);
+  isPlaying = false;
+  showTrain();
+}
 
 // --- GRAPH ---
 function drawGraph(canvasId, data, recording) {
@@ -682,6 +722,138 @@ function drawGraph(canvasId, data, recording) {
       ctx.fillStyle = '#fff'; ctx.fill();
     }
   }
+}
+
+// --- PLAYBACK ---
+function setupPlayback() {
+  if (!recordedBlob) return;
+
+  // Clean up previous
+  if (playbackAudio) { playbackAudio.pause(); playbackAudio = null; }
+  if (playbackAnimFrame) cancelAnimationFrame(playbackAnimFrame);
+  isPlaying = false;
+
+  const url = URL.createObjectURL(recordedBlob);
+  playbackAudio = new Audio(url);
+
+  playbackAudio.addEventListener('loadedmetadata', () => {
+    const dur = playbackAudio.duration;
+    document.getElementById('playback-duration').textContent = formatTime(dur);
+    drawWaveform(volumeHistory, -1);
+  });
+
+  playbackAudio.addEventListener('ended', () => {
+    isPlaying = false;
+    document.getElementById('play-btn').textContent = '▶';
+    document.getElementById('playback-fill').style.width = '100%';
+    if (playbackAnimFrame) cancelAnimationFrame(playbackAnimFrame);
+    drawWaveform(volumeHistory, 1.0);
+  });
+}
+
+function togglePlayback() {
+  if (!playbackAudio) return;
+  if (isPlaying) {
+    playbackAudio.pause();
+    isPlaying = false;
+    document.getElementById('play-btn').textContent = '▶';
+    if (playbackAnimFrame) cancelAnimationFrame(playbackAnimFrame);
+  } else {
+    playbackAudio.play();
+    isPlaying = true;
+    document.getElementById('play-btn').textContent = '❚❚';
+    updatePlaybackProgress();
+  }
+}
+
+function updatePlaybackProgress() {
+  if (!playbackAudio || !isPlaying) return;
+  const pct = playbackAudio.currentTime / playbackAudio.duration;
+  document.getElementById('playback-fill').style.width = (pct * 100) + '%';
+  document.getElementById('playback-time').textContent = formatTime(playbackAudio.currentTime);
+  drawWaveform(volumeHistory, pct);
+  playbackAnimFrame = requestAnimationFrame(updatePlaybackProgress);
+}
+
+function seekPlayback(e) {
+  if (!playbackAudio) return;
+  const bar = document.getElementById('playback-progress');
+  const rect = bar.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  playbackAudio.currentTime = pct * playbackAudio.duration;
+  document.getElementById('playback-fill').style.width = (pct * 100) + '%';
+  document.getElementById('playback-time').textContent = formatTime(playbackAudio.currentTime);
+  drawWaveform(volumeHistory, pct);
+}
+
+function formatTime(s) {
+  if (!s || isNaN(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function drawWaveform(data, progress) {
+  const canvas = document.getElementById('waveformCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0d0d0d';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!data || data.length === 0) return;
+
+  // Downsample volume data to bars
+  const barCount = 80;
+  const step = Math.max(1, Math.floor(data.length / barCount));
+  const bars = [];
+  for (let i = 0; i < barCount; i++) {
+    const start = i * step;
+    const end = Math.min(start + step, data.length);
+    let sum = 0;
+    for (let j = start; j < end; j++) sum += data[j];
+    bars.push(sum / (end - start));
+  }
+
+  const barW = W / barCount;
+  const progressIdx = progress >= 0 ? Math.floor(progress * barCount) : -1;
+  const midY = H / 2;
+
+  bars.forEach((v, i) => {
+    const h = Math.max(2, v * H * 2.5);
+    const x = i * barW;
+    const isPast = i <= progressIdx;
+    const isCurrent = i === progressIdx;
+
+    // Mirror bars (up and down from center)
+    const topY = midY - h / 2;
+
+    if (isCurrent) {
+      // Glowing current bar
+      ctx.shadowColor = lc().color;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + 1, topY, barW - 2, h);
+      ctx.shadowBlur = 0;
+    } else if (isPast) {
+      const grad = ctx.createLinearGradient(x, topY, x, topY + h);
+      grad.addColorStop(0, lc().color + 'ee');
+      grad.addColorStop(0.5, lc().color + 'ff');
+      grad.addColorStop(1, lc().color + 'ee');
+      ctx.fillStyle = grad;
+      ctx.fillRect(x + 1, topY, barW - 2, h);
+    } else {
+      ctx.fillStyle = '#333';
+      ctx.fillRect(x + 1, topY, barW - 2, h);
+    }
+  });
 }
 
 // --- INIT ---
